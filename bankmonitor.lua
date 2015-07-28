@@ -1,9 +1,11 @@
--- Version 0.50
+-- Version 0.51
 
 -- Changelog:
 -- Added TODO List
 -- Mostly fixed indentation because OCD
 -- Updated Pastebin with current code
+-- Actually fixed indentation
+-- Made lamp colours gradients
 
 
 -- ==================================
@@ -21,7 +23,6 @@
 
 
 local component = require("component")
-local os = require("os")
 local term = require("term")
 
 local gpu = component.gpu            -- Note that this program requires a T3 Screen.
@@ -29,71 +30,66 @@ local gpu = component.gpu            -- Note that this program requires a T3 Scr
 local lamp = component.colorful_lamp -- As of right now, a Computronics Lamp is required. 
                                      -- I may take another stab at making it optional later on,
                                      -- but for now, it's required or the program will not run.
+									 
+local blue = 0x1F
 
-orange = 25984
-yellow = 32736
-red = 25600
-green = 992
-blue = 31
+local bit32 = bit32 or load([[return {
+    band = function(a, b) return a & b end,
+    bor = function(a, b) return a | b end,
+    bxor = function(a, b) return a ~ b end,
+    bnot = function(a) return ~a end,
+    rshift = function(a, n) return a >> n end,
+    lshift = function(a, n) return a << n end,
+}]])()  -- Thanks, Magik6k for the workaround code that I shamelessly sto- I mean borrowed!
 
-gpu.setResolution(32,1) -- For larger CapBank multiblocks, '32' may need to be increased to fit the amounts.
+gpu.setResolution(40,1)
 
-function checkBatt()
- curr = 0
- for addr, name in (component.list("capacitor_bank")) do
-  battcheck = component.proxy(addr).getEnergyStored()
-  curr = curr + battcheck
- end
- return curr
+local function checkBatt()
+  local curr = 0
+  for addr in component.list("capacitor_bank") do
+    battcheck = component.proxy(addr).getEnergyStored()
+    curr = curr + battcheck
+  end
+  return curr
 end
 
-function getMaxBatt()
- max = 0
-  for addr, name in (component.list("capacitor_bank")) do
-   maxcheck = component.proxy(addr).getMaxEnergyStored()
-   max = max + maxcheck
+local function getMaxBatt()
+  local maxStorage = 0
+  for addr in component.list("capacitor_bank") do
+    maxcheck = component.proxy(addr).getMaxEnergyStored()
+    maxStorage = maxStorage + maxcheck
   end
- return max
+  return maxStorage
 end
 
-function updateMon()
- term.clear()
- term.setCursor(1,1)
- io.stdout:write(curr .. "/" .. max .. " RF Stored.")
- return
+local function updateMon(curr, maxStorage)
+  term.clear()
+  term.setCursor(1,1)
+  io.stdout:write(curr .. "/" .. maxStorage .. " RF Stored.")
+  return
 end
 
-function updateLamp()
- max = getMaxBatt()
- curr = checkBatt()
- perc = (curr / max) * 100
-  if perc > 75 then do
-   lamp.setLampColor(green)
+local function updateLamp(curr, maxStorage)
+  if curr == 0 and maxStorage == 0 then
+    lamp.setLampColor(blue)
+    return
+  else
+    local perc = curr / maxStorage
+    local red = math.max(math.min(math.ceil(0x1C * ((1 - perc)*2)), 0x1C), 0)
+    local green = math.max(math.min(math.ceil(0x1F * (perc * 2)), 0x1F), 0)
+    lamp.setLampColor(bit32.bor(bit32.lshift(red, 10), bit32.lshift(green, 5)))
   end
-  elseif perc <= 75 and perc > 50 then do
-   lamp.setLampColor(yellow)
-  end
-  elseif perc <=50 and perc > 25 then do
-   lamp.setLampColor(orange)
-  end
-  elseif perc < 25 then do
-   lamp.setLampColor(red)
-  end
-  elseif curr == 0 and max == 0 then do
-   lamp.setLampColor(blue)
-  end
- end
-return
 end
 
+function updateReactor()  -- Code WIP
+end
 
 while true do
-
-max = getMaxBatt()
-curr = checkBatt()
-updateMon()
-updateLamp()
-os.sleep(1)
+  local maxStorage = getMaxBatt()
+  local curr = checkBatt()
+  updateMon(curr, maxStorage)
+  updateLamp(curr, maxStorage)
+  os.sleep(1)
 end
 
 -- Code End
